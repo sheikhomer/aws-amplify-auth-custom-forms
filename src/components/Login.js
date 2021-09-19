@@ -1,57 +1,49 @@
 import { AmplifySignIn, AmplifyButton } from "@aws-amplify/ui-react";
 import constants from "../utility/constants";
-import {validate} from "../utility/validate";
+import {validate, isFormValid} from "../utility/validate";
 import { errorStyle } from "../utility/inlineStyles";
 import { useReducer, useRef } from "react";
 import ValidationMessage from "./common/ValidationMessage";
+import {setFormFocus} from "../utility/helpers";
 
 const formStateReducer = (formState, action) => {
   const { type, name, rules, value } = action;
   if (type === "submit") {
+    setFormFocus(formState);
     return {
       ...formState,
-      emailFocused: true,
-      passwordFocused: true,
     };
   }
   const isValid = validate({ value, type, rules });
-  switch (name) {
-    case "email":
-      return {
-        ...formState,
-        isFormValid:
-          formState.passwordValid && formState.passwordFocused && isValid,
-        email: value,
-        emailValid: isValid,
-        emailFocused: true,
-      };
-    case "password":
-      return {
-        ...formState,
-        isFormValid: formState.emailValid && formState.emailFocused && isValid,
-        password: value,
-        passwordValid: isValid,
-        passwordFocused: true,
-      };
-    default:
-      return {
-        ...formState,
-      };
-  }
+  const newFormState = {
+    ...formState,
+    [name]: {
+      focused: true,
+      value: value,
+      valid: isValid,
+    },
+  };
+  newFormState.isFormValid = isFormValid(newFormState);
+  return newFormState;
 };
 
 const Login = () => {
   const [formState, dispatch] = useReducer(formStateReducer, {
     isFormValid: false,
-    email: "",
-    emailValid: false,
-    emailFocused: false,
-    password: "",
-    passwordValid: false,
-    passwordFocused: false,
+    email: {
+      valid: false,
+      focused: false,
+      value: "",
+    },
+    password: {
+      valid: false,
+      focused: false,
+      value: "",
+    }
   });
 
-  let amplifySignInRef = useRef();
+  const {isFormValid, email, password} = formState;
+  const amplifySignInRef = useRef();
   const setAmplifySignInRef = (node) => {
     if (node) {
       const array = [...node.children];
@@ -65,7 +57,7 @@ const Login = () => {
 
   const handleSubmit = (ev) => {
     ev.preventDefault();
-    if (!formState.isFormValid) {
+    if (!isFormValid) {
       dispatch({ type: "submit" });
       return;
     }
@@ -81,7 +73,7 @@ const Login = () => {
         type: "email",
         label: constants.EMAIL_LABEL,
         placeholder: constants.EMAIL_PLACEHOLDER,
-        value: formState.email,
+        value: email.value,
         inputProps: {
           autocomplete: "off",
           onBlur: (e) => {
@@ -91,18 +83,18 @@ const Login = () => {
             });
           },
           style:
-            !formState.emailValid && formState.emailFocused ? errorStyle : null,
+            !email.valid && email.focused ? errorStyle : null,
         },
       },
       {
         type: "password",
         label: constants.PASSWORD_LABEL,
         placeholder: constants.PASSWORD_PLACEHOLDER,
-        value: formState.password,
+        value: password.value,
         inputProps: {
           autocomplete: "off",
           style:
-            !formState.passwordValid && formState.passwordFocused
+            !password.valid && password.focused
               ? errorStyle
               : null,
           onblur: (e) =>
@@ -118,10 +110,10 @@ const Login = () => {
     <div ref={setAmplifySignInRef} slot="sign-in">
       <AmplifySignIn formFields={formFields()}>
         <div slot="header-subtitle">
-          {!formState.emailValid && formState.emailFocused && (
+          {!email.valid && email.focused && (
             <ValidationMessage message="Please enter a valid email address" />
           )}
-          {!formState.passwordValid && formState.passwordFocused && (
+          {!password.valid && password.focused && (
             <ValidationMessage message="Please enter a valid password" />
           )}
         </div>

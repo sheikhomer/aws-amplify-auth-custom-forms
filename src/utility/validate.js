@@ -21,10 +21,10 @@ const validate = ({ value, type, rules = {} }) => {
         result = inputValue.trim() !== "";
         break;
       case "regex":
-        result = !!inputValue.match(ruleValue);
+        result = !!inputValue.match(ruleValue?.value);
         break;
       case "match":
-        result = match({ruleValue, inputValue});
+        result = match({ruleValue: ruleValue?.value, inputValue});
         break;
       default:
         break;
@@ -33,10 +33,10 @@ const validate = ({ value, type, rules = {} }) => {
   };
   let result = testByInputType({ type, value });
     if (result) {
-      result = Object.keys(rules).every((key, index) =>
+      result = Object.keys(rules).every((key) =>
         testByRule({
           ruleName: key,
-          ruleValue: rules[index],
+          ruleValue: rules[key],
           inputValue: value,
         })
       );
@@ -48,4 +48,8 @@ const match = ({ ruleValue, inputValue }) => {
   return ruleValue === inputValue;
 }
 
-export {validate, match};
+const isFormValid = (form) => {
+  return Object.keys(form).filter(f => f !== "isFormValid").every((k) => form[k].valid);
+};
+
+export {validate, match, isFormValid};

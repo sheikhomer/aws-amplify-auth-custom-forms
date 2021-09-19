@@ -1,20 +1,48 @@
 import { AmplifySignUp } from "@aws-amplify/ui-react";
+import { Auth } from "@aws-amplify/auth";
 import constants from "../utility/constants";
-import { validate, match } from "../utility/validate";
+import { validate, match, isFormValid } from "../utility/validate";
 import { errorStyle } from "../utility/inlineStyles";
 import { useReducer, useRef } from "react";
+import { dispatchToastHubEvent } from "@aws-amplify/ui-components/dist/collection/common/helpers";
+import { handleSignIn } from "@aws-amplify/ui-components/dist/collection/common/auth-helpers";
+import { setFormFocus } from "../utility/helpers";
+import ValidationMessage from "./common/ValidationMessage";
+import { AuthState } from "@aws-amplify/ui-components";
 
 const formStateReducer = (formState, action) => {
   const { type, name, rules, value } = action;
   if (type === "submit") {
-    Object.keys(formState).forEach((k) => {
-      formState[k].focused = true;
-    });
+    setFormFocus(formState);
     return {
       ...formState,
     };
   }
+
+  if (type === "error") {
+    return {
+      ...formState,
+      isFormValid: false,
+      password: {
+        value: "",
+        valid: false,
+        matched: false,
+        focused: true,
+      },
+      confirmPassword: {
+        value: "",
+        valid: false,
+        matched: false,
+        focused: true,
+      },
+    };
+  }
   const isValid = validate({ value, type, rules });
+
+  if (rules["match"] !== undefined) {
+    formState[rules["match"].field].valid = isValid;
+    formState[rules["match"].field].matched = isValid;
+  }
 
   const newFormState = {
     ...formState,
@@ -32,11 +60,18 @@ const formStateReducer = (formState, action) => {
   return newFormState;
 };
 
-const isFormValid = (formState) => {
-  return Object.keys(formState).every((k) => formState[k].valid);
-};
-
 const Signup = () => {
+  const amplifySignUpRef = useRef();
+  const setAmplifySignUpRef = (node) => {
+    if (node) {
+      const array = [...node.children];
+      if (array.some((val) => val.nodeName === "AMPLIFY-SIGN-UP")) {
+        amplifySignUpRef.current = array.find(
+          (val) => val.nodeName === "AMPLIFY-SIGN-UP"
+        );
+      }
+    }
+  };
   const [formState, dispatch] = useReducer(formStateReducer, {
     isFormValid: false,
     email: {
@@ -61,22 +96,69 @@ const Signup = () => {
       focused: false,
       value: "",
     },
-    lastname:{
+    lastname: {
       valid: false,
       focused: false,
       value: "",
     },
-    phone:{
+    phone: {
       valid: false,
       focused: false,
       value: "",
-    }
+    },
   });
   const handleValidation = ({ ev, rules }) => {
     const { value, type, name } = ev.target;
     dispatch({ type, name, rules, value });
   };
-  const {isFormValid, email, password, confirmPassword, firstname, lastname, phone} = formState;
+  const {
+    isFormValid,
+    email,
+    password,
+    confirmPassword,
+    firstname,
+    lastname,
+    phone,
+  } = formState;
+  const handleSubmit = async (ev) => {
+    ev.preventDefault();
+    if (!isFormValid) {
+      dispatch({ type: "submit" });
+      return;
+    }
+    try {
+      const authData = {
+        username: email.value,
+        password: password.value,
+        attributes: {
+          email: email.value,
+          phone_number: `+44${phone.value}`,
+          given_name: firstname.value,
+          family_name: lastname.value,
+        },
+      };
+      const data = await Auth.signUp(authData);
+      if (data.userConfirmed) {
+        await handleSignIn(
+          email.value,
+          password.value,
+          amplifySignUpRef.current.handleAuthStateChange
+        );
+      } else {
+        const signUpAttrs = { ...authData };
+        amplifySignUpRef.current.handleAuthStateChange(
+          AuthState.ConfirmSignUp,
+          {
+            ...data.user,
+            signUpAttrs,
+          }
+        );
+      }
+    } catch (error) {
+      dispatch({ type: "error" });
+      dispatchToastHubEvent(error);
+    }
+  };
   const formFields = () => {
     return [
       {
@@ -107,7 +189,13 @@ const Signup = () => {
             handleValidation({
               rules: {
                 required: true,
-                match: { value: confirmPassword.value },
+                match: {
+                  value: confirmPassword.value,
+                  field: "confirmPassword",
+                },
+                regex: {
+                  value: /^.*(?=.{8,})(?=.*\d)(?=.*[a-zA-Z]).*$/,
+                },
               },
               ev: e,
             }),
@@ -127,7 +215,13 @@ const Signup = () => {
               : null,
           onblur: (e) =>
             handleValidation({
-              rules: { required: true, match: { value: password.value } },
+              rules: {
+                required: true,
+                match: { value: password.value, field: "password" },
+                regex: {
+                  value: /^.*(?=.{8,})(?=.*\d)(?=.*[a-zA-Z]).*$/,
+                },
+              },
               ev: e,
             }),
         },
@@ -177,7 +271,10 @@ const Signup = () => {
           onBlur: (e) => {
             handleValidation({
               ev: e,
-              rules: { required: true },
+              rules: {
+                required: true,
+                regex: { value: /^(0[1-9][0-9]{8,9})$/ },
+              },
             });
           },
           style: !phone.valid && phone.focused ? errorStyle : null,
@@ -186,8 +283,27 @@ const Signup = () => {
     ];
   };
   return (
-    <div slot="sign-up">
-      <AmplifySignUp formFields={formFields()}></AmplifySignUp>
+    <div slot="sign-up" ref={setAmplifySignUpRef}>
+      <AmplifySignUp formFields={formFields()} handleSubmit={handleSubmit}>
+        <div slot="header-subtitle">
+          {!email.valid && email.focused && (
+            <ValidationMessage message="Please enter a valid email address" />
+          )}
+          {(!password.valid || !confirmPassword.valid) &&
+            (password.focused || confirmPassword.focused) && (
+              <ValidationMessage message="Please enter your password (must have at least 8 characters with at least one number) and confirm it" />
+            )}
+          {!firstname.valid && firstname.focused && (
+            <ValidationMessage message="Please enter your firstname" />
+          )}
+          {!lastname.valid && lastname.focused && (
+            <ValidationMessage message="Please enter your lastname" />
+          )}
+          {!phone.valid && phone.focused && (
+            <ValidationMessage message="Please enter a valid UK phone number" />
+          )}
+        </div>
+      </AmplifySignUp>
     </div>
   );
 };
