@@ -291,7 +291,7 @@ const Signup = () => {
           )}
           {(!password.valid || !confirmPassword.valid) &&
             (password.focused || confirmPassword.focused) && (
-              <ValidationMessage message="Please enter your password (must have at least 8 characters with at least one number) and confirm it" />
+              <ValidationMessage message="Please enter and confirm your password (minimum 8 characters with at least one number)" />
             )}
           {!firstname.valid && firstname.focused && (
             <ValidationMessage message="Please enter your firstname" />
