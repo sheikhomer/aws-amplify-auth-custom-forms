@@ -1,0 +1,11 @@
+{
+  "auth": {
+    "reviveauth50bd86aa": {
+      "service": "Cognito",
+      "serviceType": "imported",
+      "providerPlugin": "awscloudformation",
+      "dependsOn": [],
+      "customAuth": false
+    }
+  }
+}
